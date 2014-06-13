@@ -2,9 +2,189 @@ package POE::Component::Client::WWW::Mechanize;
 
 use warnings;
 use strict;
+use utf8;
+
 use Carp;
 
+use WWW::Mechanize;
+use POE;
+use base qw(POE::Component::Syndicator);
+use HTTP::Request;
+use Try::Tiny;
+
+my $http_backend;
+my $backend_default = q(POE::Component::Client::HTTP);
+
+use Module::Runtime qw/use_module/;
+
+sub import {
+
+    my $package = shift;
+
+    my $backend = $_[0] || "POE::Component::Client::HTTP";
+
+    try {
+        use_module( $backend );
+        $http_backend = $backend;
+    } catch {
+        carp "Failed loading '$backend', falling back to '$backend_default'";
+        use_module( $backend_default );
+        $http_backend = $backend_default;
+    }
+
+}
+
 use version; our $VERSION = qv('0.0.1');
+
+sub _random_tag {
+    unpack "h*", rand;
+}
+
+## Public Methods
+
+sub spawn {
+
+    my $package = shift;
+    my %args = @_;
+
+    my($alias) = delete $args{Alias};
+
+    ## Give the internal http client a random alias
+    my $http_client_alias = "PoCo-" . unpack "h*", rand;
+    $args{Alias} = $http_client_alias;
+
+    my $http = $http_backend->spawn(%args);
+
+    my $self = bless {
+        mech => WWW::Mechanize->new( agent => $args{Agent} ),
+        post_to_http_client => sub {
+            $poe_kernel->post( $http_client_alias, @_ );
+        },
+    }, $package;
+
+    $self->_syndicator_init(
+        prefix => 'mech_',
+        alias => $alias,
+        object_states => [
+            $self => [qw/
+                            syndicator_started
+                            syndicator_shutdown
+                            request
+                            get
+                            _after_request_cleanup
+                        /],
+        ],
+
+    );
+
+    return bless $self, $package;
+
+}
+
+## Private Methods
+
+sub new_request {
+
+    my $self = shift;
+
+    my $req = HTTP::Request->new( @_ );
+
+    $self->massage_request($req);
+
+}
+
+sub massage_request {
+
+    my ($self,$request) = (shift,shift);
+
+    ## a trick to make mech do all the things we want it to do with
+    ## the request before submitting it
+    my $mech = $self->{mech};
+
+    $mech->add_handler( "request_send", sub { HTTP::Response->new } );
+    $mech->request($request);
+    $mech->back;
+    $mech->remove_handler( "request_send" );
+
+    $request;
+
+}
+
+## Events
+
+sub syndicator_started {
+    return 1;
+}
+
+sub syndicator_shutdown {
+    $_[HEAP]->{post_to_http_client}->("shutdown");
+}
+
+sub request {
+
+    my($self,$kernel,$heap,$sender,
+       $response_event,$request,
+       $tag,$progress_event,$proxy) =
+        @_[OBJECT,KERNEL,HEAP,SENDER,ARG0,ARG1,ARG2,ARG3,ARG4];
+
+    $tag //= _random_tag;
+
+    $heap->{after_request_action}{$tag} //= [$sender->ID,$response_event];
+
+    $heap->{post_to_http_client}->(
+        request => "_after_request_cleanup",
+        $request,
+        $tag,
+        $progress_event,
+        $proxy
+    );
+
+}
+
+sub get {
+
+    my($self,$kernel,$heap,$sender,
+       $url,$response_event,$tag,
+       $progress_event, $proxy
+   ) = @_[OBJECT,KERNEL,HEAP,SENDER,
+          ARG0,ARG1,ARG2,ARG3,ARG4];
+
+    $tag //= _random_tag;
+    $_[HEAP]->{after_request_response_event}{$tag} //= [$sender,$response_event];
+
+    my $request = $self->new_request( GET => $url );
+
+    $kernel->yield( request => $response_event,
+                    $request, $tag,
+                );
+
+}
+
+sub _after_request_cleanup {
+
+    my($self,$heap,$kernel,
+       $request_packet,$response_packet) =
+        @_[OBJECT,HEAP,KERNEL,ARG0,ARG1];
+
+    my $tag = $request_packet->[1];
+
+    my($sender,$action) = @{ delete $heap->{after_request_action}{$tag} };
+
+    my $mech = $self->{mech};
+
+    my $request = $request_packet->[0];
+    my $response = $response_packet->[0];
+
+    ## plant the response in the Mech
+    if ( $response->is_success ) {
+        $mech->add_handler( "request_send", sub { $response } );
+        $mech->request($request);
+        $mech->remove_handler( "request_send" );
+    }
+
+    $kernel->post( $sender, $action, $request_packet, $response_packet ) or die $!;
+
+}
 
 1;
 __END__
@@ -37,14 +217,40 @@ This document describes POE::Component::Client::WWW::Mechanize version 0.0.1
     Use subsections (=head2, =head3) as appropriate.
 
 
-=head1 INTERFACE
+=head1 PUBLIC METHODS
 
-=for author to fill in:
-    Write a separate section listing the public components of the modules
-    interface. These normally consist of either subroutines that may be
-    exported, or methods that may be called on objects belonging to the
-    classes provided by the module.
+=head2 spawn
 
+Creates the component. Takes the same argument as PoCo::HTTP::Client.
+
+=head1 PRIVATE METHODS
+
+=head2 new_request
+
+Internal method. Creates a new request. Takes same arguments as
+HTTP::Request->new.
+
+=head2 massage_request
+
+Internal method. For manually created requests, this function lets
+WWW::Mechanize add cookies etc. essentially make it look like W::M
+would have make it look like before sending it.
+
+=head1 INTERESTING EVENTS
+
+=head2 request
+
+Argument list: $response, $request, $tag, $progress, $proxy
+
+Works just like the request event in PoCo::Client::HTTP
+
+=head2 get
+
+Performs a get request,
+
+Argument list: $url, $response, $tag, $progress, $proxy
+
+Gets a url. A shortcut for the request event.
 
 =head1 DIAGNOSTICS
 
