@@ -14,10 +14,10 @@ BEGIN {
 
 use Test::More;
 use Test::POE::Server::TCP;
-use POE qw(Filter::Stream Component::Client::HTTP);
+use POE qw(Filter::Stream Component::Client::WWW::Mechanize);
 use HTTP::Request::Common qw(GET);
 
-POE::Component::Client::HTTP->spawn( Alias => 'ua' );
+POE::Component::Client::WWW::Mechanize->spawn( Alias => 'ua' );
 
 plan tests => 6;
 

@@ -1,7 +1,7 @@
 #!/usr/bin/perl
 # vim: ts=2 sw=2 filetype=perl expandtab
 
-# There are cases where POE::Component::Client::HTTP generates no
+# There are cases where POE::Component::Client::WWW::Mechanize generates no
 # responses.  This exercises some of them.
 
 # This also test cases where, after the above bug was fix,
@@ -26,7 +26,7 @@ sub DEBUG () { 0 }
 use Test::More tests => 8;
 
 use POE;
-use POE::Component::Client::HTTP;
+use POE::Component::Client::WWW::Mechanize;
 use POE::Component::Server::TCP;
 
 my @server_ports;
@@ -59,7 +59,7 @@ my @responses = (
     $CRLF .
     "HTTP::Response"
   ),
-  # The status line here causes PoCo::Client::HTTP to crash.  There's
+  # The status line here causes PoCo::Client::WWW::Mechanize to crash.  There's
   # the space after the status code but no "OK".
   (
     "HTTP/1.1 200 " . $CRLF .
@@ -109,7 +109,7 @@ my @responses = (
 }
 
 # Spawn the HTTP user-agent component.
-POE::Component::Client::HTTP->spawn();
+POE::Component::Client::WWW::Mechanize->spawn(Alias => "weeble");
 
 # Create a client session to drive the HTTP component.
 POE::Session->create(

@@ -10,7 +10,7 @@ BEGIN {
 
 use POE qw(
   Filter::Stream
-  Component::Client::HTTP
+  Component::Client::WWW::Mechanize
   Component::Client::Keepalive
 );
 use HTTP::Request::Common qw(GET);
@@ -41,7 +41,7 @@ my $pool = POE::Component::Client::Keepalive->new(
 
 my $http_alias = 'ua';
 
-POE::Component::Client::HTTP->spawn(
+POE::Component::Client::WWW::Mechanize->spawn(
     Alias             => $http_alias,
     Timeout           => 30,
     FollowRedirects   => 1,

@@ -24,9 +24,9 @@ sub POE::Kernel::TRACE_EVENTS     () { 0 }
 sub POE::Kernel::TRACE_REFCNT     () { 0 }
 sub POE::Kernel::CATCH_EXCEPTIONS () { 0 }
 use Test::POE::Server::TCP;
-use POE qw(Filter::Stream Component::Client::HTTP);
+use POE qw(Filter::Stream Component::Client::WWW::Mechanize);
 
-POE::Component::Client::HTTP->spawn( Alias => 'ua' );
+POE::Component::Client::WWW::Mechanize->spawn( Alias => 'ua' );
 
 POE::Session->create(
   inline_states => {

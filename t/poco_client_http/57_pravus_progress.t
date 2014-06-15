@@ -7,10 +7,10 @@ use strict;
 use Test::More tests => 2;
 use HTTP::Request::Common qw(GET);
 use POE;
-use POE::Component::Client::HTTP;
+use POE::Component::Client::WWW::Mechanize;
 use Test::POE::Server::TCP;
 
-POE::Component::Client::HTTP->spawn(
+POE::Component::Client::WWW::Mechanize->spawn(
   Alias           => 'ua',
   Streaming       => 4000,
   FollowRedirects => 32,

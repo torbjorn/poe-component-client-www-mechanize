@@ -8,12 +8,12 @@ use warnings;
 use Test::More tests => 1;
 
 use POE;
-use POE::Component::Client::HTTP;
+use POE::Component::Client::WWW::Mechanize;
 use POE::Component::Server::TCP;
 use HTTP::Request::Common qw(GET);
 use Socket;
 
-POE::Component::Client::HTTP->spawn(
+POE::Component::Client::WWW::Mechanize->spawn(
  Alias => 'ua',
  Timeout => 2,
 );

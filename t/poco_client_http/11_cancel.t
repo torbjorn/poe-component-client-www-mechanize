@@ -14,7 +14,7 @@ use Test::More;
 sub DEBUG () { 0 }
 sub POE::Kernel::ASSERT_DEFAULT () { DEBUG }
 
-use POE qw(Component::Client::HTTP Filter::Stream);
+use POE qw(Component::Client::WWW::Mechanize Filter::Stream);
 use Test::POE::Server::TCP;
 
 
@@ -25,7 +25,7 @@ plan tests => 1;
 
 # Create the HTTP client session.
 
-POE::Component::Client::HTTP->spawn(
+POE::Component::Client::WWW::Mechanize->spawn(
   Streaming => MAX_STREAM_CHUNK_SIZE,
   Alias     => "streamer",
 );
@@ -153,5 +153,9 @@ sub client_got_response {
 }
 
 sub client_timeout {
-  $_[KERNEL]->post( weeble => 'shutdown' );
+  $_[KERNEL]->post( streamer => 'shutdown' );
+  ## Need to figure out why this needs a timeout, and even an exit in
+  ## the timeout
+  note "Would have done an exit here";
+  # exit;
 }

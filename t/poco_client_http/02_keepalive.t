@@ -10,7 +10,7 @@ BEGIN {
 sub DEBUG () { 0 }
 #sub POE::Kernel::ASSERT_DEFAULT () { 1 }
 
-use POE qw(Component::Client::HTTP Component::Client::Keepalive);
+use POE qw(Component::Client::WWW::Mechanize Component::Client::Keepalive);
 use Test::POE::Server::TCP;
 use HTTP::Request::Common qw(GET);
 use Test::More;
@@ -122,7 +122,6 @@ sub client_got_response {
   ];
   my $http_request  = $request_packet->[0];
   my $http_response = $response_packet->[0];
-
   # DEBUG and "client SECOND_RESPONSE: START";
 
   DEBUG and do {
@@ -154,10 +153,11 @@ sub client_got_response {
 #------------------------------------------------------------------------------
 
 # Create a weeble component.
-POE::Component::Client::HTTP->spawn(
+POE::Component::Client::WWW::Mechanize->spawn(
   #MaxSize           => MAX_BIG_REQUEST_SIZE,
   Timeout           => 2,
   ConnectionManager => $cm,
+  Alias => 'weeble',
 );
 
 # Create a session that will make some requests.

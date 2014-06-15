@@ -22,7 +22,7 @@ sub DEBUG ()              { 0 }
 use Test::More tests => 9;
 
 use POE;
-use POE::Component::Client::HTTP;
+use POE::Component::Client::WWW::Mechanize;
 use POE::Component::Server::TCP;
 
 my $port;
@@ -150,10 +150,11 @@ sub parse_next_request {
 ### CLIENT
 
 # Spawn the HTTP user-agent component.
-POE::Component::Client::HTTP->spawn(
+POE::Component::Client::WWW::Mechanize->spawn(
   FollowRedirects => 3,
   MaxSize         => 512,
   Timeout         => 2,
+  Alias           => "weeble",
 );
 
 # Create a client session to drive the HTTP component.

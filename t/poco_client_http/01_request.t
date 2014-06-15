@@ -12,7 +12,6 @@ use POE qw(
   Filter::Stream
   Filter::HTTPD
   Component::Client::WWW::Mechanize
-  Component::Client::HTTP
   Component::Client::Keepalive
 );
 
@@ -44,14 +43,6 @@ EOF
 
 use HTTP::Request::Common qw(GET POST);
 
-#my $cm = POE::Component::Client::Keepalive->new;
-# POE::Component::Client::HTTP->spawn(
-#   #MaxSize => MAX_BIG_REQUEST_SIZE,
-#   MaxSize => 200,
-#   Timeout => 3,
-#   #Protocol => 'HTTP/1.1', #default
-#   #ConnectionManager => $cm, #default
-# );
 POE::Component::Client::WWW::Mechanize->spawn(
   #MaxSize => MAX_BIG_REQUEST_SIZE,
   Alias => "weeble",

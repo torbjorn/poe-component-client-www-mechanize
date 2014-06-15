@@ -1,7 +1,7 @@
 #! /usr/bin/perl
 # vim: ts=2 sw=2 filetype=perl expandtab
 
-# Test case for POE::Component::Client::HTTP failing to redirect HEAD
+# Test case for POE::Component::Client::WWW::Mechanize failing to redirect HEAD
 # requests.
 
 use strict;
@@ -16,11 +16,11 @@ BEGIN {
 
 use Test::More tests => 2;
 use Test::POE::Server::TCP;
-use POE qw(Component::Client::HTTP);
+use POE qw(Component::Client::WWW::Mechanize);
 use HTTP::Request::Common qw(HEAD);
 
-POE::Component::Client::HTTP->spawn( Alias => 'no_redir' );
-POE::Component::Client::HTTP->spawn( Alias => 'redir', FollowRedirects => 5 );
+POE::Component::Client::WWW::Mechanize->spawn( Alias => 'no_redir' );
+POE::Component::Client::WWW::Mechanize->spawn( Alias => 'redir', FollowRedirects => 5 );
 
 POE::Session->create(
     inline_states => {

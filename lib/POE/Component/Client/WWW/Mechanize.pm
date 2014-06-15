@@ -15,6 +15,8 @@ use Try::Tiny;
 my $http_backend;
 my $backend_default = q(POE::Component::Client::HTTP);
 
+use feature ':all';
+
 use Module::Runtime qw/use_module/;
 
 sub import {
@@ -36,10 +38,6 @@ sub import {
 
 use version; our $VERSION = qv('0.0.1');
 
-sub _random_tag {
-    unpack "h*", rand;
-}
-
 ## Public Methods
 
 sub spawn {
@@ -48,6 +46,7 @@ sub spawn {
     my %args = @_;
 
     my($alias) = delete $args{Alias};
+    $alias //= "mech";
 
     ## Give the internal http client a random alias
     my $http_client_alias = "PoCo-" . unpack "h*", rand;
@@ -57,22 +56,25 @@ sub spawn {
 
     my $self = bless {
         mech => WWW::Mechanize->new( agent => $args{Agent} ),
-        post_to_http_client => sub {
-            $poe_kernel->post( $http_client_alias, @_ );
+        call_to_http_client => sub {
+            $poe_kernel->call( $http_client_alias, @_ );
         },
+        ( $args{Streaming} ? (Streaming => 1) : () )
     }, $package;
 
     $self->_syndicator_init(
         prefix => 'mech_',
         alias => $alias,
         object_states => [
-            $self => [qw/
-                            syndicator_started
-                            syndicator_shutdown
-                            request
-                            get
-                            _after_request_cleanup
-                        /],
+            $self => {
+                shutdown => "syndicator_shutdown",
+                syndicator_started => "syndicator_started",
+                request => "request",
+                cancel => "cancel",
+                pending_requests_count => "pending_requests_count",
+                get => "get",
+                _after_request_cleanup => "_after_request_cleanup",
+            }
         ],
 
     );
@@ -112,12 +114,11 @@ sub massage_request {
 
 ## Events
 
-sub syndicator_started {
-    return 1;
-}
+sub syndicator_started {}
 
 sub syndicator_shutdown {
-    $_[HEAP]->{post_to_http_client}->("shutdown");
+    $_[HEAP]->{call_to_http_client}->("shutdown");
+    $_[OBJECT]->_syndicator_destroy;
 }
 
 sub request {
@@ -127,18 +128,26 @@ sub request {
        $tag,$progress_event,$proxy) =
         @_[OBJECT,KERNEL,HEAP,SENDER,ARG0,ARG1,ARG2,ARG3,ARG4];
 
-    $tag //= _random_tag;
+    $kernel->refcount_increment( $sender->ID, "pending-requests" );
 
-    $heap->{after_request_action}{$tag} //= [$sender->ID,$response_event];
+    $heap->{after_request_action}{$request} //= [$sender->ID,$response_event,$request];
 
-    $heap->{post_to_http_client}->(
+    $heap->{call_to_http_client}->(
         request => "_after_request_cleanup",
         $request,
         $tag,
-        $progress_event,
+        defined $progress_event ? $sender->postback( $progress_event ) : undef,
         $proxy
     );
 
+}
+
+sub cancel {
+    $_[OBJECT]->{call_to_http_client}->("cancel",$_[ARG0]);
+}
+
+sub pending_requests_count {
+    $_[OBJECT]->{call_to_http_client}->("pending_requests_count");
 }
 
 sub get {
@@ -149,10 +158,9 @@ sub get {
    ) = @_[OBJECT,KERNEL,HEAP,SENDER,
           ARG0,ARG1,ARG2,ARG3,ARG4];
 
-    $tag //= _random_tag;
-    $_[HEAP]->{after_request_response_event}{$tag} //= [$sender,$response_event];
-
     my $request = $self->new_request( GET => $url );
+
+    $_[HEAP]->{after_request_response_event}{$request} //= [$sender,$response_event,$request];
 
     $kernel->yield( request => $response_event,
                     $request, $tag,
@@ -168,21 +176,42 @@ sub _after_request_cleanup {
 
     my $tag = $request_packet->[1];
 
-    my($sender,$action) = @{ delete $heap->{after_request_action}{$tag} };
-
     my $mech = $self->{mech};
 
     my $request = $request_packet->[0];
     my $response = $response_packet->[0];
 
-    ## plant the response in the Mech
-    if ( $response->is_success ) {
-        $mech->add_handler( "request_send", sub { $response } );
-        $mech->request($request);
-        $mech->remove_handler( "request_send" );
+    my($sender_id,$action) = @{ $heap->{after_request_action}{$request} };
+
+    if ( $self->{Streaming} ) {
+
+        ## don't bother with inserting the response into W::M
+        if (
+            not $response->is_success or
+            not $response->content
+                and not defined($response_packet->[1])
+            ) {
+
+            $kernel->refcount_decrement( $sender_id, "pending-requests" );
+            delete $heap->{after_request_action}{$request};
+        }
+
+    }
+    else {
+
+        ## plant the response in the Mech
+        if ( $response->is_success ) {
+            $mech->add_handler( "request_send", sub { $response } );
+            $mech->request($request);
+            $mech->remove_handler( "request_send" );
+        }
+
+        $kernel->refcount_decrement( $sender_id, "pending-requests" );
+        delete $heap->{after_request_action}{$request};
+
     }
 
-    $kernel->post( $sender, $action, $request_packet, $response_packet ) or die $!;
+    $kernel->post( $sender_id, $action, $request_packet, $response_packet ) or die $!;
 
 }
 
@@ -242,7 +271,7 @@ would have make it look like before sending it.
 
 Argument list: $response, $request, $tag, $progress, $proxy
 
-Works just like the request event in PoCo::Client::HTTP
+Works just like the request event in PoCo::Client::HTTP.
 
 =head2 get
 
@@ -251,6 +280,16 @@ Performs a get request,
 Argument list: $url, $response, $tag, $progress, $proxy
 
 Gets a url. A shortcut for the request event.
+
+=head2 cancel
+
+Cancels the current ongoing request.
+
+Works the same way as cancel for PCHC.
+
+=head2 pending_requests_count
+
+Is mirrored to PCHC.
 
 =head1 DIAGNOSTICS
 

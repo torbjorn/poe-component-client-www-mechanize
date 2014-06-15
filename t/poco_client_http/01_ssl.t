@@ -4,7 +4,7 @@ use strict;
 sub POE::Kernel::ASSERT_DEFAULT () { 1 }
 sub DEBUG () { 0 }
 
-use POE qw(Component::Client::HTTP Component::Client::Keepalive);
+use POE qw(Component::Client::WWW::Mechanize Component::Client::Keepalive);
 use HTTP::Request::Common qw(GET POST);
 use Test::More;
 
@@ -65,7 +65,8 @@ sub client_got_response {
 }
 
 # Create a weeble component.
-POE::Component::Client::HTTP->spawn(
+POE::Component::Client::WWW::Mechanize->spawn(
+  Alias => "weeble",
   Timeout => 60,
 );
 

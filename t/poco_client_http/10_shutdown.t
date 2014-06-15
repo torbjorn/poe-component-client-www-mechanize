@@ -10,12 +10,12 @@ use HTTP::Request::Common qw(GET);
 use Test::More;
 use Test::POE::Server::TCP;
 
-use POE qw(Component::Client::HTTP);
+use POE qw(Component::Client::WWW::Mechanize);
 
 plan tests => 2;
 
 # Create a weeble component.
-POE::Component::Client::HTTP->spawn( Timeout => 2 );
+POE::Component::Client::WWW::Mechanize->spawn( Timeout => 2, Alias => "weeble" );
 
 # Create a session that will make some requests.
 POE::Session->create(

@@ -21,7 +21,7 @@ sub DEBUG () { 0 }
 use Test::More;
 
 use POE;
-use POE::Component::Client::HTTP;
+use POE::Component::Client::WWW::Mechanize;
 use POE::Component::Server::TCP;
 
 use Net::HTTP::Methods;
@@ -169,7 +169,7 @@ BEGIN {
 
 
 # Spawn the HTTP user-agent component.
-POE::Component::Client::HTTP->spawn();
+POE::Component::Client::WWW::Mechanize->spawn(Alias => "weeble");
 
 # Create a client session to drive the HTTP component.
 POE::Session->create(

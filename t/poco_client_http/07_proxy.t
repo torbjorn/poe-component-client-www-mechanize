@@ -16,7 +16,7 @@ use Socket;
 use POE;
 use POE::Session;
 use POE::Component::Server::TCP;
-use POE::Component::Client::HTTP;
+use POE::Component::Client::WWW::Mechanize;
 use POE::Filter::HTTPD;
 use HTTP::Request;
 use HTTP::Request::Common qw(GET PUT);
@@ -33,8 +33,8 @@ BEGIN {
 
 POE::Session->create(
    inline_states => {
-    _child => sub { undef },
-    _stop => sub { undef },
+    _child => sub {  },
+    _stop => sub {  },
 
     _start => sub {
       my $kernel = $_[KERNEL];
@@ -57,8 +57,8 @@ POE::Session->create(
     begin_tests => sub {
       my ($kernel, $heap) = @_[KERNEL, HEAP];
 
-      POE::Component::Client::HTTP->spawn(Alias => 'DefProxy', Proxy => $heap->{proxy1});
-      POE::Component::Client::HTTP->spawn(Alias => 'NoProxy', FollowRedirects => 3);
+      POE::Component::Client::WWW::Mechanize->spawn(Alias => 'DefProxy', Proxy => $heap->{proxy1});
+      POE::Component::Client::WWW::Mechanize->spawn(Alias => 'NoProxy', FollowRedirects => 3);
 
       # Test is default proxy working
       $kernel->post(DefProxy => request => test1_resp => GET $heap->{host});

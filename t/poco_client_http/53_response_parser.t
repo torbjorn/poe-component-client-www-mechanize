@@ -2,7 +2,7 @@
 # vim: filetype=perl ts=2 sw=2 expandtab
 
 # Generic response parser testing, especially for cases where
-# POE::Component::Client::HTTP generates the wrong response.
+# POE::Component::Client::WWW::Mechanize generates the wrong response.
 
 use warnings;
 use strict;
@@ -22,7 +22,7 @@ sub DEBUG () { 0 }
 use Test::More tests => 5;
 
 use POE;
-use POE::Component::Client::HTTP;
+use POE::Component::Client::WWW::Mechanize;
 use POE::Component::Server::TCP;
 
 my $test_number = 0;
@@ -164,7 +164,7 @@ BEGIN {
 }
 
 # Spawn the HTTP user-agent component.
-POE::Component::Client::HTTP->spawn();
+POE::Component::Client::WWW::Mechanize->spawn(Alias => "weeble");
 
 # Create a client session to drive the HTTP component.
 POE::Session->create(

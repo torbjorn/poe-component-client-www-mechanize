@@ -17,12 +17,12 @@ sub DEBUG () { 0 }
 use Test::More tests => 3;
 
 use POE;
-use POE::Component::Client::HTTP;
+use POE::Component::Client::WWW::Mechanize;
 use POE::Component::Server::TCP;
 
 my $port;
 my $response;
-sub fix_response { 
+sub fix_response {
   $response =
     "HTTP/1.1 302 Moved$CRLF" .
     "Connection: close$CRLF" .
@@ -64,7 +64,7 @@ sub fix_response {
 }
 
 # Spawn the HTTP user-agent component.
-POE::Component::Client::HTTP->spawn( FollowRedirects => 1 );
+POE::Component::Client::WWW::Mechanize->spawn( FollowRedirects => 1, Alias => "weeble" );
 
 # Create a client session to drive the HTTP component.
 POE::Session->create(

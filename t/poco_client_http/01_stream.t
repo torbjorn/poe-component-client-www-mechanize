@@ -11,7 +11,7 @@ use Test::More;
 use POE qw(
   Filter::Stream
   Filter::HTTPD
-  Component::Client::HTTP
+  Component::Client::WWW::Mechanize
   Component::Client::Keepalive
 );
 
@@ -22,7 +22,7 @@ my $long = <<EOF;
 200 OK
 Connection: close
 Content-Length: 300
-Bogus-Header: 
+Bogus-Header:
 EOF
 
 chomp $long;
@@ -51,9 +51,10 @@ my @expect = qw(A D L T);
 use HTTP::Request::Common qw(GET POST);
 
 #my $cm = POE::Component::Client::Keepalive->new;
-POE::Component::Client::HTTP->spawn(
+POE::Component::Client::WWW::Mechanize->spawn(
   Streaming => 256,
   Timeout => 2,
+  Alias => "weeble",
 );
 
 POE::Session->create(
@@ -80,7 +81,7 @@ sub _start {
   @requests = (
     GET("http://localhost:$port/stream", Connection => 'close'),
   );
-  
+
   plan tests => @requests * 6;
 }
 
@@ -91,7 +92,7 @@ sub testd_registered {
     $kernel->post(
         'weeble',
         request =>
-          'got_response', 
+          'got_response',
           $r,
     );
   }
