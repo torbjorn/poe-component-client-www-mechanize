@@ -94,7 +94,6 @@ sub new_request {
     $self->massage_request($req);
 
 }
-
 sub massage_request {
 
     my ($self,$request) = (shift,shift);
@@ -132,8 +131,9 @@ sub request {
        $tag,$progress_event,$proxy) =
         @_[OBJECT,KERNEL,HEAP,SENDER,ARG0,ARG1,ARG2,ARG3,ARG4];
 
-    $kernel->refcount_increment( $sender->ID, "pending-requests" );
+    &_register_request;
 
+    $kernel->refcount_increment( $sender->ID, "pending-requests" );
     $heap->{after_request_action}{$request} //= [$sender->ID,$response_event,$request];
 
     $heap->{call_to_http_client}->(
@@ -151,6 +151,44 @@ sub cancel {
 
 ## From W::M's interface
 
+sub _register_request {
+
+    my($heap,$sender,$response_event,$request) = @_[HEAP,SENDER,ARG0,ARG1];
+
+    ## Check it
+    if ( not $heap->isa("POE::Component::Client::WWW::Mechanize") ) {
+        confess "First argument to _register_request should be the heap";
+    }
+    if ( not $sender->isa("POE::Session" ) ) {
+        confess "Second argument to _register_request should be a session (the sender)";
+    }
+    if ( not defined $response_event ) {
+        confess "Third argument should be the event name (of the sender) to receive the response";
+    }
+    if ( not $request->isa("HTTP::Request") ) {
+        confess "Fourth argument should be a http request";
+    }
+
+    $heap->{after_request_action} //= {};
+
+    ## assumes sender is the session from which the request started
+    if ( not exists $heap->{after_request_action}{$request} ) {
+        $_[KERNEL]->refcount_increment( $sender->ID, "pending-requests" );
+        $heap->{after_request_action}{$request} //= [$sender->ID,$response_event,$request];
+    }
+    else {
+       ## Leave it for now
+    }
+
+}
+
+sub _unregister_request {
+
+    $_[KERNEL]->refcount_decrement( $_[SENDER]->ID, "pending-requests" );
+    delete $_[HEAP]->{after_request_action}{$_[ARG0]};
+
+}
+
 sub get {
 
     my($self,$kernel,$heap,$sender,
@@ -161,7 +199,7 @@ sub get {
 
     my $request = $self->new_request( GET => $url );
 
-    $_[HEAP]->{after_request_response_event}{$request} //= [$sender,$response_event,$request];
+    &_register_request;
 
     $kernel->yield( request => $response_event,
                     $request, $tag,
@@ -189,7 +227,6 @@ sub post {
 
 }
 
-
 sub _after_request_cleanup {
 
     my($self,$heap,$kernel,
@@ -214,8 +251,7 @@ sub _after_request_cleanup {
                 and not defined($response_packet->[1])
             ) {
 
-            $kernel->refcount_decrement( $sender_id, "pending-requests" );
-            delete $heap->{after_request_action}{$request};
+            &_unregister_request;
         }
 
     }
@@ -228,9 +264,7 @@ sub _after_request_cleanup {
             $mech->remove_handler( "request_send" );
         }
 
-        $kernel->refcount_decrement( $sender_id, "pending-requests" );
-        delete $heap->{after_request_action}{$request};
-
+        &_unregister_request;
     }
 
     $kernel->post( $sender_id, $action, $request_packet, $response_packet ) or die $!;
@@ -244,22 +278,38 @@ __END__
 
 =head1 NAME
 
-POE::Component::Client::WWW::Mechanize - [One line description of module's purpose here]
+POE::Component::Client::WWW::Mechanize - Have WWW::Mechanize use
+PoCo::Client::HTTP for http requests, essentially making W::M
+asynchronously.
 
 =head1 VERSION
 
 This document describes POE::Component::Client::WWW::Mechanize version 0.0.1
 
-
 =head1 SYNOPSIS
 
-    use POE::Component::Client::WWW::Mechanize;
+    use POE qw(Component::Client::WWW::Mechanize);
 
-=for author to fill in:
-    Brief code example(s) here showing commonest usage(s).
-    This section will be as far as many users bother reading
-    so make it as educational and exeplary as possible.
+    ## spawn takes exact same arguments as PoCo::Client::HTTP
+    POE::Component::Client::WWW::Mechanize->spawn( Alias => "mech" );
 
+    POE::Session->create(
+        inline_states => {
+            _start => sub {
+                $_[KERNEL]->post( "mech", get => "http://metacpan.org", "got_response" )
+            }
+        }
+    );
+
+    ## Gets the same argument list as the response handler of PoCo::HTTP::Client
+    sub got_response {
+        print "Jay, got a response!\n";
+        print "Headers:\n"
+        print $_[ARG1]->[0]->headers->as_string;
+        print "-"x80, "\n";
+        print "Request looked like this:";
+        print $_[ARG0]->[0]->as_string;
+    }
 
 =head1 DESCRIPTION
 
