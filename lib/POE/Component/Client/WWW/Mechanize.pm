@@ -115,11 +115,15 @@ sub massage_request {
 ## Events
 
 sub syndicator_started {}
-
 sub syndicator_shutdown {
     $_[HEAP]->{call_to_http_client}->("shutdown");
     $_[OBJECT]->_syndicator_destroy;
 }
+sub pending_requests_count {
+    $_[OBJECT]->{call_to_http_client}->("pending_requests_count");
+}
+
+## From PoCo::C::H
 
 sub request {
 
@@ -141,14 +145,11 @@ sub request {
     );
 
 }
-
 sub cancel {
     $_[OBJECT]->{call_to_http_client}->("cancel",$_[ARG0]);
 }
 
-sub pending_requests_count {
-    $_[OBJECT]->{call_to_http_client}->("pending_requests_count");
-}
+## From W::M's interface
 
 sub get {
 
@@ -167,6 +168,27 @@ sub get {
                 );
 
 }
+
+sub post {
+
+    my($self,$kernel,$heap,$sender,
+       $url,$content,$response_event,$tag,
+       $progress_event, $proxy
+   ) = @_[OBJECT,KERNEL,HEAP,SENDER,
+          ARG0,ARG1,ARG2,ARG3,ARG4,ARG5];
+
+    my $request = $self->new_request( POST => $url );
+
+    $request->content( $content );
+
+    $_[HEAP]->{after_request_response_event}{$request} //= [$sender,$response_event,$request];
+
+    $kernel->yield( request => $response_event,
+                    $request, $tag,
+                );
+
+}
+
 
 sub _after_request_cleanup {
 
