@@ -1,32 +1,26 @@
 package t::lib::TestUtils;
 
-use Mojolicious::Lite;
+use strict;
+use warnings;
+use POE::Declare::HTTP::Server;
+use feature ':all';
 
-# sub import {
+sub import {
 
-#     my $daemon = Mojo::Server::Daemon->new(listen => ['http://*:8080']);
+    my($package,$alias) = (shift,shift);
+    my %handlers = @_;
 
-#     $daemon->unsubscribe('request');
-#     $daemon->on(request => sub {
+    $_ = "poe:$alias/$_" for values %handlers;
 
-#         my ($daemon, $tx) = @_;
+    POEx::HTTP::Server->spawn(
+        inet => {
+            LocalPort => 8000,
+        },
+        handlers => [
+            %handlers
+        ]
+    );
 
-#         # Request
-#         my $method = $tx->req->method;
-#         my $path   = $tx->req->url->path;
-
-#         # Response
-#         $tx->res->code(200);
-#         $tx->res->headers->content_type('text/plain');
-#         $tx->res->body("$method request for $path!");
-
-#         # Resume transaction
-#         $tx->resume;
-
-#     });
-
-#     $daemon->run;
-
-# }
+}
 
 1;
