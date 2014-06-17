@@ -100,8 +100,9 @@ sub process_response2 {
     my $request = $_[ARG0]->[0];
     my $response = $_[ARG1]->[0];
 
-    ok( $response->is_success, "success is ok" );
-    is( $request->header( "A-Header" ), "a value", "custom header" );
+    ok $response->is_success, "success is ok";
+    is $request->header( "A-Header" ), "a value", "custom header";
+    is $request->headers->referer, $uri, "http referer";
 
     $_[KERNEL]->yield( "clean_up" );
 
