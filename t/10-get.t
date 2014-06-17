@@ -4,7 +4,7 @@ use strict;
 use warnings;
 use utf8::all;
 use Test::Most;
-# use Test::Warnings;
+use Test::Warnings;
 
 use HTTP::Request::Common qw/GET/;
 
