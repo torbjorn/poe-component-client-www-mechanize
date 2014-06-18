@@ -62,19 +62,63 @@ sub spawn {
         ( $args{Streaming} ? (Streaming => 1) : () )
     }, $package;
 
+    my @mech_interface =
+        qw/
+              form_number form_name form_id form_with_fields
+              field select set_fields set_visible
+              tick untick value button
+
+              add_header delete_header quiet stack_depth save_content
+              dump_headers dump_links dump_images dump_forms dump_text
+
+              clone redirect_ok update_html credentials get_basic_credentials
+              clear_credentials
+
+          /;
+
+    my %mech_extra;
+    @mech_extra{@mech_interface} = ("mech_interface")x@mech_interface;
+
+    {
+        no strict 'refs';
+        for (@mech_interface) {
+            my $name = __PACKAGE__ . "::" . $_;
+            *$name = \&mech_interface;
+        }
+    }
+
     $self->_syndicator_init(
         prefix => 'mech_',
         alias => $alias,
         object_states => [
             $self => {
                 shutdown => "syndicator_shutdown",
-                syndicator_started => "syndicator_started",
-                request => "request",
-                cancel => "cancel",
-                pending_requests_count => "pending_requests_count",
-                get => "get",
-                _after_request_cleanup => "_after_request_cleanup",
-            }
+
+                get => "get_like",
+                delete => "get_like",
+                head => "get_like",
+
+                post => "post_like",
+                put => "post_like",
+
+
+
+                %mech_extra,
+
+            },
+            $self => [
+                qw/
+                      request cancel
+
+                      form_number
+                      field
+
+                      pending_requests_count
+
+                      _after_request_cleanup
+                      syndicator_started
+                  /
+            ]
         ],
 
     );
@@ -87,27 +131,71 @@ sub spawn {
 
 sub new_request {
 
-    my $self = shift;
+    my($self,$method) = (shift,shift);
 
-    my $req = HTTP::Request->new( @_ );
+    my $mech = $self->{mech};
 
-    $self->massage_request($req);
+    my $request;
+
+    $mech->add_handler( "request_send", sub { $request = shift; HTTP::Response->new } );
+    $mech->$method(@_);
+    $mech->back;
+    $mech->remove_handler( "request_send" );
+
+    return $request;
 
 }
 sub massage_request {
 
-    my ($self,$request) = (shift,shift);
+    my($self,$request) = (shift,shift);
 
-    ## a trick to make mech do all the things we want it to do with
-    ## the request before submitting it
     my $mech = $self->{mech};
 
-    $mech->add_handler( "request_send", sub { HTTP::Response->new } );
-    $mech->request($request);
-    $mech->back;
-    $mech->remove_handler( "request_send" );
+    $mech->_modify_request( $request );
+
+    # $mech->add_handler( "request_send", sub { HTTP::Response->new } );
+    # $mech->request($request);
+    # $mech->back;
+    # $mech->remove_handler( "request_send" );
 
     $request;
+
+}
+
+## Functions for internal use
+
+sub _register_request {
+
+    # my($self,$kernel,$heap,$sender,
+    #    $response_event,$request,
+    #    $tag,$progress_event,$proxy) =
+    #     @_[OBJECT,KERNEL,HEAP,SENDER,ARG0,ARG1,ARG2,ARG3,ARG4];
+
+    $_[HEAP]->{after_request_action} //= {};
+
+    ## assumes sender is the session from which the request started
+    if ( not exists $_[HEAP]->{after_request_action}{ $_[ARG1] } ) {
+
+        ## ARG0: response_event name
+        ## ARG1: request
+
+        $_[KERNEL]->refcount_increment( $_[SENDER]->ID, "pending-requests" );
+        $_[HEAP]->{after_request_action}{ $_[ARG1] } = [ $_[SENDER]->ID, $_[ARG0], $_[ARG1] ];
+
+    }
+    else {
+       ## Leave it for now
+    }
+
+}
+sub _unregister_request {
+
+    ## ARG0: [ request, tag ]
+    ## ARG1: [ response, content ]
+
+    my $sender_id = $_[HEAP]->{after_request_action}{$_[ARG0]->[0]}[0];
+    $_[KERNEL]->refcount_decrement( $sender_id, "pending-requests" );
+    delete $_[HEAP]->{after_request_action}{$_[ARG0]->[0]};
 
 }
 
@@ -118,116 +206,10 @@ sub syndicator_shutdown {
     $_[HEAP]->{call_to_http_client}->("shutdown");
     $_[OBJECT]->_syndicator_destroy;
 }
-sub pending_requests_count {
-    $_[OBJECT]->{call_to_http_client}->("pending_requests_count");
-}
-
-## From PoCo::C::H
-
-sub request {
-
-    my($self,$kernel,$heap,$sender,
-       $response_event,$request,
-       $tag,$progress_event,$proxy) =
-        @_[OBJECT,KERNEL,HEAP,SENDER,ARG0,ARG1,ARG2,ARG3,ARG4];
-
-    &_register_request;
-
-    $kernel->refcount_increment( $sender->ID, "pending-requests" );
-    $heap->{after_request_action}{$request} //= [$sender->ID,$response_event,$request];
-
-    $heap->{call_to_http_client}->(
-        request => "_after_request_cleanup",
-        $request,
-        $tag,
-        defined $progress_event ? $sender->postback( $progress_event ) : undef,
-        $proxy
-    );
-
-}
-sub cancel {
-    $_[OBJECT]->{call_to_http_client}->("cancel",$_[ARG0]);
-}
-
-## From W::M's interface
-
-sub _register_request {
-
-    my($heap,$sender,$response_event,$request) = @_[HEAP,SENDER,ARG0,ARG1];
-
-    ## Check it
-    if ( not $heap->isa("POE::Component::Client::WWW::Mechanize") ) {
-        confess "First argument to _register_request should be the heap";
-    }
-    if ( not $sender->isa("POE::Session" ) ) {
-        confess "Second argument to _register_request should be a session (the sender)";
-    }
-    if ( not defined $response_event ) {
-        confess "Third argument should be the event name (of the sender) to receive the response";
-    }
-    if ( not $request->isa("HTTP::Request") ) {
-        confess "Fourth argument should be a http request";
-    }
-
-    $heap->{after_request_action} //= {};
-
-    ## assumes sender is the session from which the request started
-    if ( not exists $heap->{after_request_action}{$request} ) {
-        $_[KERNEL]->refcount_increment( $sender->ID, "pending-requests" );
-        $heap->{after_request_action}{$request} //= [$sender->ID,$response_event,$request];
-    }
-    else {
-       ## Leave it for now
-    }
-
-}
-
-sub _unregister_request {
-
-    $_[KERNEL]->refcount_decrement( $_[SENDER]->ID, "pending-requests" );
-    delete $_[HEAP]->{after_request_action}{$_[ARG0]};
-
-}
-
-sub get {
-
-    my($self,$kernel,$heap,$sender,
-       $url,$response_event,$tag,
-       $progress_event, $proxy
-   ) = @_[OBJECT,KERNEL,HEAP,SENDER,
-          ARG0,ARG1,ARG2,ARG3,ARG4];
-
-    my $request = $self->new_request( GET => $url );
-
-    &_register_request;
-
-    $kernel->yield( request => $response_event,
-                    $request, $tag,
-                );
-
-}
-
-sub post {
-
-    my($self,$kernel,$heap,$sender,
-       $url,$content,$response_event,$tag,
-       $progress_event, $proxy
-   ) = @_[OBJECT,KERNEL,HEAP,SENDER,
-          ARG0,ARG1,ARG2,ARG3,ARG4,ARG5];
-
-    my $request = $self->new_request( POST => $url );
-
-    $request->content( $content );
-
-    $_[HEAP]->{after_request_response_event}{$request} //= [$sender,$response_event,$request];
-
-    $kernel->yield( request => $response_event,
-                    $request, $tag,
-                );
-
-}
-
 sub _after_request_cleanup {
+
+    ## ARG0 is request_packet
+    ## ARG1 is response_packet
 
     my($self,$heap,$kernel,
        $request_packet,$response_packet) =
@@ -269,6 +251,93 @@ sub _after_request_cleanup {
 
     $kernel->post( $sender_id, $action, $request_packet, $response_packet ) or die $!;
 
+}
+
+## From PoCo::C::H
+
+sub request {
+
+    my($self,$kernel,$heap,$sender,
+       $response_event,$request,
+       $tag,$progress_event,$proxy) =
+        @_[OBJECT,KERNEL,HEAP,SENDER,ARG0,ARG1,ARG2,ARG3,ARG4];
+
+    $self->massage_request($request);
+
+    &_register_request;
+
+    $heap->{call_to_http_client}->(
+        request => "_after_request_cleanup",
+        $request,
+        $tag,
+        defined $progress_event ? $sender->postback( $progress_event ) : undef,
+        $proxy
+    );
+
+}
+sub cancel {
+    $_[OBJECT]->{call_to_http_client}->("cancel",$_[ARG0]);
+}
+sub pending_requests_count {
+    $_[OBJECT]->{call_to_http_client}->("pending_requests_count");
+}
+
+## Made to match W::M's interface
+
+sub get_like {
+
+    my($self,$kernel,$heap,$sender,
+       $url,$response_event,$tag,
+       $progress_event, $proxy
+   ) = @_[OBJECT,KERNEL,HEAP,SENDER,
+          ARG0,ARG1,ARG2,ARG3,ARG4];
+
+    my @rest_of_args = grep defined, @_[ARG5 .. $#_ ];
+
+    my $request = $self->new_request( get => $url, @rest_of_args );
+
+    {
+        ## This was a bit unfortunate, but can live with it
+        local @_[ARG0,ARG1] = ($response_event,$request);
+        &_register_request;
+    }
+
+    $kernel->yield( request => "_after_request_cleanup",
+                    $request, $tag,
+                );
+
+}
+sub post_like {
+
+    my($self, $kernel, $heap, $sender,
+       $url, $content, $response_event, $tag, $progress_event, $proxy ) =
+           @_[OBJECT,KERNEL,HEAP,SENDER,
+              ARG0,ARG1,ARG2,ARG3,ARG4,ARG5];
+
+    $content //= {};
+
+    my @rest_of_args = grep defined, @_[ARG6 .. $#_ ];
+
+    my $request = $self->new_request( $_[STATE] => $url, $content, @rest_of_args );
+
+    {
+        ## @_ will be a mess after this, but only need 0 and 1 anyway
+        local @_[ARG0,ARG1] = ($response_event,$request);
+        &_register_request;
+    }
+
+    $kernel->yield( request => "_after_request_cleanup",
+                    $request, $tag,
+                );
+
+}
+
+## form selectors
+
+sub mech_interface {
+    ## make sure event is named as mech method
+    my $method = $_[STATE];
+    return $_[HEAP]->{mech}->$method( @_[ ARG0..$#_ ] );
 }
 
 1;
@@ -328,8 +397,14 @@ Creates the component. Takes the same argument as PoCo::HTTP::Client.
 
 =head2 new_request
 
-Internal method. Creates a new request. Takes same arguments as
-HTTP::Request->new.
+Internal method. Creates a new request from various input. First
+argument is method, following arguments is what would have been used
+for the corresponding method in LWP::UserAgent.
+
+Example: my $request = $self->new_request( "get", "http://uri" )
+
+It brings with it all the things that W::M would have brought. Ie
+cookies etc.
 
 =head2 massage_request
 
@@ -347,17 +422,31 @@ Works just like the request event in PoCo::Client::HTTP.
 
 =head2 get
 
-Performs a get request,
+Performs a GET request,
 
-Argument list: $url, $response, $tag, $progress, $proxy
+Argument list: $url, $response, $tag, $progress, $proxy, @additional
 
 Gets a url. A shortcut for the request event.
+
+=head2 post
+
+Performs a POST request,
+
+Argument list: $url, $response, $content, $tag, $progress, $proxy, @additional
 
 =head2 cancel
 
 Cancels the current ongoing request.
 
 Works the same way as cancel for PCHC.
+
+=head2 field
+
+Changes the value of a field in the current form.
+
+=head2 form_number
+
+Sets which form number to use, as in W::M.
 
 =head2 pending_requests_count
 
