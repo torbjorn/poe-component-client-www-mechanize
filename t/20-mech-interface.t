@@ -102,11 +102,11 @@ sub process_response {
     lives_ok { $c->( save_content => $temp_file ) } "save_content";
     is $temp_file->slurp, $mech->content, "compare to content on file";
 
-    stdout_is { $c->("dump_headers") } $response->headers->as_string, "dump_headers";
-    stdout_like { $c->("dump_links") } qr/\S/, "dump_links produces something";
-    stdout_is { $c->("dump_images") } "", "dump_images produces nothing";
-    stdout_like { $c->("dump_forms") } qr/\S/, "dump_forms produces something";
-    stdout_like { $c->("dump_text") } qr/\S/, "dump_text produces something";
+    stdout_is   { $c->("dump_headers") } $response->headers->as_string, "dump_headers";
+    stdout_like { $c->("dump_links")   } qr/\S/, "dump_links produces something";
+    stdout_is   { $c->("dump_images")  } "", "dump_images produces nothing";
+    stdout_like { $c->("dump_forms")   } qr/\S/, "dump_forms produces something";
+    stdout_like { $c->("dump_text")    } qr/\S/, "dump_text produces something";
 
     isa_ok my $mech_clone = $c->("clone"), "WWW::Mechanize", "the clone";
     isnt $mech, $mech_clone, "Clone and source aren't the same";
