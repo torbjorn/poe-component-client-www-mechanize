@@ -64,16 +64,16 @@ sub spawn {
 
     my @mech_interface =
         qw/
+              forms
               form_number form_name form_id form_with_fields
               field select set_fields set_visible
-              tick untick value button
+              tick untick value
 
               add_header delete_header quiet stack_depth save_content
               dump_headers dump_links dump_images dump_forms dump_text
 
               clone redirect_ok update_html credentials get_basic_credentials
               clear_credentials
-
           /;
 
     my %mech_extra;
@@ -333,7 +333,6 @@ sub post_like {
 }
 
 ## form selectors
-
 sub mech_interface {
     ## make sure event is named as mech method
     my $method = $_[STATE];

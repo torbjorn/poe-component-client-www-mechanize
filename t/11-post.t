@@ -10,11 +10,11 @@ use HTTP::Request::Common qw/GET/;
 use HTTP::Request::Params;
 use POE qw(Component::Client::WWW::Mechanize);
 
-use t::lib::TestUtils qw/server_handler/;
+my $uri;
+BEGIN { $uri = "http://localhost:8000/?foo=bar" };
+use t::lib::TestUtils $uri;
 
 POE::Component::Client::WWW::Mechanize->spawn;
-
-my ($uri,$html);
 
 # defining a callback to create a session
 POE::Session->create(
@@ -26,7 +26,7 @@ POE::Session->create(
                   process_response
                   process_response2
                   clean_up
-                  server_handler
+
               /
           ]
     ]
@@ -45,18 +45,6 @@ sub _start {
 }
 sub _stop {}
 
-sub server_handler {
-
-    my($request,$response,$dirmatch) = @_[ARG0,ARG1,ARG2];
-
-    # Webby content generation stuff here
-    $response->code( 200 );
-    $response->content_type( "text/html" );
-    $response->content( $html );
-
-    $_[KERNEL]->post( "httpd", "DONE", $response ) or die $!;
-
-}
 sub process_response {
 
     note "request #1";
@@ -104,40 +92,4 @@ sub process_response2 {
 sub clean_up {
     $_[KERNEL]->post( mech => "shutdown" );
     $_[KERNEL]->post( httpd => "SHUTDOWN" );
-}
-
-BEGIN {
-
-    $uri = "http://localhost:8000/?foo=bar";
-
-    $html = <<EOC;
-<!doctype html>
-
-<html lang="en">
-<head>
-  <meta charset="utf-8">
-
-  <title>HTML Title</title>
-  <meta name="description" content="HTML5 Sample content">
-  <meta name="author" content="PoCo::Mech">
-
-  <link rel="stylesheet" href="css/styles.css?v=1.0">
-
-</head>
-
-<body>
-HTML Content
-
-<form method="post" action="$uri">
-<input name="testinput" value="a defaultvalue"/>
-<input type="submit"/>
-</form>
-
-<a href="$uri&step=2">This is a link</a>
-
-<script src="js/a_script_file.js"></script>
-</body>
-</html>
-EOC
-
 }
