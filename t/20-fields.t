@@ -9,6 +9,7 @@ use Test::Most;
 use HTTP::Request::Common qw/GET/;
 use HTTP::Request::Params;
 use POE qw(Component::Client::WWW::Mechanize);
+use Path::Tiny;
 
 my $uri;
 BEGIN { $uri = "http://localhost:8000/?foo=bar" };
@@ -58,7 +59,7 @@ sub process_response {
     note "field(...) in form 1";
 
     ok $c->( "form_number", 1 ), "form 1";
-    is $forms[0]->param("testinput"), "a defaultvalue", "original field value";
+    is $forms[0]->param("testinput"), "a default value", "original field value";
     ok $c->( field => "testinput", "a changed value" ), "call field" ;
     is $forms[0]->param("testinput"), "a changed value", "field changed";
     is $c->( value => "testinput" ), $forms[0]->param("testinput"),
@@ -85,6 +86,18 @@ sub process_response {
     ok $forms[1]->param("box2"), "checkbox still ticked";
     lives_ok { $c->( "untick", "box2", "value2" ) } "unticking...";
     ok !$forms[1]->param("box2"), "checkbox now unticked";
+
+    note "back to form 1 again";
+
+    ok $c->( form_with_fields => qw/testinput imhidden/ ), "form_with_fields";
+
+    note "Mech Misc Methods";
+
+    cmp_ok $c->( "stack_depth" ), ">", 0, "stack_depth";
+
+    my $temp_file = Path::Tiny->tempfile;
+    lives_ok { $c->( save_content => $temp_file ) } "save_content";
+    is $temp_file->slurp, $mech->content, "compare to content on file";
 
     $_[KERNEL]->yield( "clean_up" );
 
