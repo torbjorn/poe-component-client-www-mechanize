@@ -15,7 +15,7 @@ use Try::Tiny;
 my $http_backend;
 my $backend_default = q(POE::Component::Client::HTTP);
 
-use feature ':all';
+use feature 'say';
 
 use Module::Runtime qw/use_module/;
 
